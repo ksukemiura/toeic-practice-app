@@ -212,6 +212,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_quiz: { Args: { p_quiz_id: string }; Returns: Json }
       save_quiz: { Args: { p_questions: Json }; Returns: string }
     }
     Enums: {
