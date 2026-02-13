@@ -5,8 +5,26 @@ import {
 import type { Database } from "@/database.types";
 import { createClient } from "@/lib/supabase/server";
 
+type QuizMetadata = Database["public"]["Tables"]["quizzes"]["Row"];
 type SaveQuizArgs = Database["public"]["Functions"]["save_quiz"]["Args"];
 type SaveQuizReturn = Database["public"]["Functions"]["save_quiz"]["Returns"];
+
+export async function GET(): Promise<NextResponse> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("quizzes")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    return NextResponse.json(
+      { error: "Failed to fetch quizzes." },
+      { status: 500 },
+    );
+  }
+
+  return NextResponse.json(data as QuizMetadata[], { status: 200 });
+}
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
