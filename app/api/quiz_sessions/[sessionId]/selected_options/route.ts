@@ -79,7 +79,7 @@ export async function POST(
 
   const { data: quizSession, error: sessionError } = await supabase
     .from("quiz_sessions")
-    .select("id, quiz_id")
+    .select("id, quiz_id, total_questions")
     .eq("id", sessionId)
     .eq("user_id", userId)
     .maybeSingle();
@@ -98,10 +98,12 @@ export async function POST(
     );
   }
 
+  let computedScore = 0;
+
   if (uniqueQuestionIds.length > 0) {
     const { data: questions, error: questionsError } = await supabase
       .from("questions")
-      .select("id")
+      .select("id, answer_index")
       .eq("quiz_id", quizSession.quiz_id)
       .in("id", uniqueQuestionIds);
 
@@ -125,7 +127,7 @@ export async function POST(
 
     const { data: options, error: optionsError } = await supabase
       .from("options")
-      .select("id, question_id")
+      .select("id, question_id, option_index")
       .in("id", uniqueOptionIds)
       .in("question_id", uniqueQuestionIds);
 
@@ -157,6 +159,28 @@ export async function POST(
         { status: 400 },
       );
     }
+
+    const questionAnswerMap = new Map(
+      (questions ?? []).map((question) => [question.id, question.answer_index]),
+    );
+    const optionIndexMap = new Map(
+      (options ?? []).map((option) => [option.id, option.option_index]),
+    );
+
+    computedScore = selectedOptions.reduce((score, selectedOption) => {
+      const answerIndex = questionAnswerMap.get(selectedOption.questionId);
+      const selectedOptionIndex = optionIndexMap.get(selectedOption.optionId);
+
+      if (
+        typeof answerIndex === "number" &&
+        typeof selectedOptionIndex === "number" &&
+        answerIndex === selectedOptionIndex
+      ) {
+        return score + 1;
+      }
+
+      return score;
+    }, 0);
   }
 
   const { error: deleteError } = await supabase
@@ -172,6 +196,18 @@ export async function POST(
   }
 
   if (selectedOptions.length === 0) {
+    const { error: scoreResetError } = await supabase
+      .from("quiz_sessions")
+      .update({ score: null })
+      .eq("id", quizSession.id);
+
+    if (scoreResetError) {
+      return NextResponse.json(
+        { error: "Failed to reset quiz session score." },
+        { status: 500 },
+      );
+    }
+
     return NextResponse.json(
       {
         selectedOptions: [] as SelectedOption[],
@@ -194,6 +230,27 @@ export async function POST(
   if (insertError) {
     return NextResponse.json(
       { error: "Failed to save selected options." },
+      { status: 500 },
+    );
+  }
+
+  const sessionTotalQuestions =
+    typeof quizSession.total_questions === "number" &&
+    Number.isFinite(quizSession.total_questions)
+      ? quizSession.total_questions
+      : uniqueQuestionIds.length;
+
+  const { error: scoreUpdateError } = await supabase
+    .from("quiz_sessions")
+    .update({
+      score: computedScore,
+      total_questions: sessionTotalQuestions,
+    })
+    .eq("id", quizSession.id);
+
+  if (scoreUpdateError) {
+    return NextResponse.json(
+      { error: "Failed to update quiz session score." },
       { status: 500 },
     );
   }
