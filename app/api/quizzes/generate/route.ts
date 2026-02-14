@@ -37,7 +37,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         },
         {
           role: "user",
-          content: "Generate TOEIC Part 5 questions.",
+          content: "Generate TOEIC Part 5 questions. Use \"-------\" for the blank.",
         },
       ],
       text: {
